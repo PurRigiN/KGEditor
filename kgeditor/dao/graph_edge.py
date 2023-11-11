@@ -3,13 +3,16 @@ import logging
 from kgeditor import domain_db
 from flask import abort
 from pyArango.query import AQLQuery
-
+from icecream import ic
+from pyArango.connection import *
 
 class EdgeDAO:
     def __init__(self):
         pass
 
     def get(self, graph_id, collection, edge_id):
+        arango_conn = Connection('http://localhost:8529', username='root', password='')
+        domain_db = arango_conn['domain_27']
         db_graph = domain_db.graphs['graph_{}'.format(graph_id)]
         url = "%s/edge/%s/%s" % (db_graph.getURL(), collection, edge_id)
 
@@ -24,9 +27,12 @@ class EdgeDAO:
         return abort(500, 'Database error.')
 
     def create(self, graph_id, collection, req):
+        arango_conn = Connection('http://localhost:8529', username='root', password='')
+        domain_db = arango_conn['domain_27']
         db_graph = domain_db.graphs['graph_{}'.format(graph_id)]
 
         try:
+            ic(collection)
             db_graph.createEdge(collection, req['from'], req['to'], req['attribute'])
         except Exception as e:
             logging.error(e)
@@ -50,6 +56,8 @@ class EdgeDAO:
         return {'message':'Update edge succeed.'}, 200
 
     def delete(self, graph_id, collection, edge_id):
+        arango_conn = Connection('http://localhost:8529', username='root', password='')
+        domain_db = arango_conn['domain_27']
         db_graph = domain_db.graphs['graph_{}'.format(graph_id)]
 
         try:

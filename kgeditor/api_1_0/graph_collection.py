@@ -1,8 +1,11 @@
 from . import api
 from kgeditor.utils.common import login_required
 from kgeditor.dao.graph_collection import CollectionDAO
+from kgeditor.dao.graph import GraphDAO
 from flask import abort
 from flask_restx import Resource, fields, reqparse
+from arango import ArangoClient
+from icecream import ic
 
 ns = api.namespace("Graph", path="/graph", description="Graph operations")
 
@@ -18,15 +21,53 @@ class CollectionList(Resource):
 
         return collection_dao.get(graph_id, type)
 
+    # @login_required
+    # def post(self, graph_id, type):
+    #     '''Create a new vertex'''
+        
+    #     req_dict = api.payload
+    #     name = req_dict.get('name')
+    #     if not name:
+    #         return abort(400, "Invalid parameters.")
+    #     return collection_dao.create(graph_id, type, api.payload)
     @login_required
     def post(self, graph_id, type):
         '''Create a new vertex'''
+        def create_edge_define(data):
+            graph_dao = GraphDAO()
+            # 获取到的ID（能打印的ID）   
+            id = graph_id
+            # ic(id)
+
+            graph_name = 'graph_' + str(id)
+
+            # 创建链接客户端
+            client = ArangoClient(hosts='http://localhost:8529')
+            # 链接数据库
+            db = client.db('domain_27', username='root', password='')
+
+            graph = db.graph(graph_name)
+
+            vertex_all = graph.vertex_collections()
+
+
+            if not graph.has_edge_definition(data['edge_name']):
+                edge = graph.create_edge_definition(
+                    edge_collection=data['edge_name'],
+                    from_vertex_collections=vertex_all,
+                    to_vertex_collections=vertex_all
+                )
 
         req_dict = api.payload
-        name = req_dict.get('name')
-        if not name:
+        relation_type_name = req_dict.get('name')
+        if not relation_type_name:
             return abort(400, "Invalid parameters.")
-        return collection_dao.create(graph_id, type, api.payload)
+        if type == 'vertex':
+            return collection_dao.create(graph_id, type, api.payload)
+        else:
+            data = {'edge_name': relation_type_name}
+            create_edge_define(data)
+            return {'message': f'Create edge collection succeed.'}, 201
 
 # @ns.route('/<int:graph_id>/edge/<string:collection>/<edge_id>')
 # class Edge(Resource):

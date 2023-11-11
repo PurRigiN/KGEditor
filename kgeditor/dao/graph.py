@@ -7,29 +7,46 @@ from xpinyin import Pinyin
 from .graph_collection import CollectionDAO
 from .graph_edge import EdgeDAO
 from .graph_vertex import VertexDAO
+from pyArango.connection import *
 
 collection_dao = CollectionDAO()
 edge_dao = EdgeDAO()
 vertex_dao = VertexDAO()
 pinyin = Pinyin()
+from icecream import ic
 
 class GraphDAO:
     def __init__(self):
         pass
 
-    def get(self, id):
+    def get(self, id, data):
+        new_collection = data['new_collection']
         try:
+            # ic(domain_db.graphs)
+            # graph = domain_db.graphs['graph_{}'.format(id)]
+            arango_conn = Connection('http://localhost:8529', username='root', password='')
+            domain_db = arango_conn['domain_27']
             graph = domain_db.graphs['graph_{}'.format(id)]
+            _orphanedCollections = graph._orphanedCollections
+            # ic(_orphanedCollections)
         except Exception as e:
+
             return abort(500, 'Database error.')
         collections = []
         edges = []
+        # ic(dir(graph))
         for k, v in graph.definitions.items():
             edges.append(k)
             collections.extend(v.fromCollections)
             collections.extend(v.toCollections)
         collections = list(set(collections))
+        # ic(collections)
+        graph._orphanedCollections = []
+        # ic(graph._orphanedCollections)
         collections.extend(graph._orphanedCollections)
+        # ic(collections)
+        collections.append(new_collection)
+        # ic(collections)
         return {'data':{'collections': collections, 'edges':edges}, 'message':'Fetch graph succeed.'}, 200
 
     def create(self, data):
@@ -54,6 +71,17 @@ class GraphDAO:
         
         return {'message': 'Create graph succeed.'}, 201
 
+    def get_graph_id(self, name):
+        user_id = g.user_id
+        try:
+            graph = Graph.query.filter_by(name=name, creator_id=user_id).first()
+        except Exception as e:
+            logging.error(e)
+            return abort(500, 'Database error.')
+        else:
+            if graph is not None:
+                # ic(graph.to_dict()['graph_id'])
+                return graph.to_dict()['graph_id']
 
     def update(self, id, data):
         pass
@@ -72,6 +100,8 @@ class GraphDAO:
             try:
                 db.session.delete(graph)
                 db.session.commit()
+                arango_conn = Connection('http://localhost:8529', username='root', password='')
+                domain_db = arango_conn['domain_27']
                 g_graph = domain_db.graphs['graph_{}'.format(graph_id)]
                 g_graph.delete()
             except Exception as e:
@@ -105,6 +135,8 @@ class GraphDAO:
         return {'data': graph_dict_list, 'message': 'Query succeed.'}, 200
 
     def traverse(self, graph_id, req_dict):
+        arango_conn = Connection('http://localhost:8529', username='root', password='')
+        domain_db = arango_conn['domain_27']
         db_graph = domain_db.graphs['graph_{}'.format(graph_id)]
         startVertex = req_dict.pop('startVertex')
         try:
@@ -116,6 +148,8 @@ class GraphDAO:
         return {'data':data['visited'], 'message':'Traverse knowledge graph succeed.'}, 200
 
     def neighbor(self, graph_id, req_dict):
+        arango_conn = Connection('http://localhost:8529', username='root', password='')
+        domain_db = arango_conn['domain_27']
         db_graph = domain_db.graphs['graph_{}'.format(graph_id)]
         startVertex = req_dict.get('startVertex')
 
@@ -128,6 +162,8 @@ class GraphDAO:
         return {'data':process_visited(data['visited']), 'message':'Fetch vertex neighbor succeed.'}, 200
 
     def insert_triplet(self, graph_id, req_dict):
+        arango_conn = Connection('http://localhost:8529', username='root', password='')
+        domain_db = arango_conn['domain_27']
         db_graph = domain_db.graphs['graph_{}'.format(graph_id)]
         e1_type = pinyin.get_pinyin(req_dict['e1_type'])
         collection_dao.create(graph_id, 'vertex', {'name': e1_type})
@@ -139,7 +175,7 @@ class GraphDAO:
         e2 = req_dict['e2']
         e1_msg, _ = vertex_dao.create(graph_id, e1_type, {'name': e1})
         e2_msg, _ = vertex_dao.create(graph_id, e2_type, {'name': e2})
-        collection_dao.create(graph_id, 'edge', {'name': relation_type, 'from':[e1_type], 'to':[e2_type]})
+        collection_dao.create_edge(graph_id, {'name': relation_type, 'from':[e1_type], 'to':[e2_type]})
         data = {
             "from": e1_msg['id'],
             "to": e2_msg['id'],
@@ -148,3 +184,4 @@ class GraphDAO:
         print(data)
         edge_dao.create(graph_id, relation_type, data)
         return {'message': 'Triplet inserted.'}, 201
+    
